@@ -1,0 +1,67 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión a publicar (ej. 1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Resolver versión
+        id: version
+        shell: pwsh
+        run: |
+          $v = if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            '${{ github.event.inputs.version }}'
+          } else {
+            '${{ github.ref_name }}' -replace '^v', ''
+          }
+          "value=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "Publicando versión $v"
+
+      - name: Tests
+        run: dotnet test --configuration Release
+
+      - name: Publicar ejecutable
+        run: >
+          dotnet publish src/SDProjectEdit.App/SDProjectEdit.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:Version=${{ steps.version.outputs.value }}
+          --output dist
+
+      - name: Empaquetar
+        shell: pwsh
+        run: |
+          Copy-Item README.md, LICENSE, CHANGELOG.md dist/
+          Compress-Archive -Path dist/* -DestinationPath SDProjectEdit-v${{ steps.version.outputs.value }}-win-x64.zip
+
+      - name: Crear release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SDProjectEdit v${{ steps.version.outputs.value }}
+          generate_release_notes: true
+          files: |
+            SDProjectEdit-v${{ steps.version.outputs.value }}-win-x64.zip
+            dist/SDProjectEdit.exe

@@ -1,0 +1,61 @@
+name: Reportar un problema
+description: Algo no funciona como debería
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por reportarlo. Cuanto más concreto, más rápido se arregla.
+
+        **Importante:** si el problema es al editar `.cwproj`, la herramienta deja un backup en
+        `<raíz del solution>\.sdprojectedit\backup\<timestamp>\`. Ese backup es la referencia
+        para comparar. No hace falta que lo adjuntes entero.
+
+  - type: textarea
+    id: que-paso
+    attributes:
+      label: Qué pasó
+      description: Qué esperabas que pasara y qué pasó en su lugar.
+    validations:
+      required: true
+
+  - type: textarea
+    id: comando
+    attributes:
+      label: Comando o pasos
+      description: El comando exacto, o los pasos en la ventana.
+      placeholder: SDProjectEdit.exe aplicar X:\MiSolution --unify Release:vid=off --yes
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: salida
+    attributes:
+      label: Salida de la herramienta
+      description: Pegá lo que imprimió, sobre todo la sección de VERIFICACIÓN o los bloqueos.
+      render: text
+
+  - type: textarea
+    id: cwproj
+    attributes:
+      label: Fragmento del .cwproj
+      description: |
+        Los PropertyGroup involucrados. Podés reemplazar los valores de `DefineConstants` y los
+        GUIDs si son sensibles — lo que importa es la estructura.
+      render: xml
+
+  - type: input
+    id: version
+    attributes:
+      label: Versión
+      description: Salida de `SDProjectEdit.exe --version`
+      placeholder: SDProjectEdit 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: clarion
+    attributes:
+      label: Versión de Clarion
+      placeholder: Clarion 11.1 build 13855

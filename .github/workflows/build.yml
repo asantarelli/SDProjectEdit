@@ -1,0 +1,63 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'LICENSE']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restaurar
+        run: dotnet restore
+
+      - name: Compilar
+        run: dotnet build --configuration Release --no-restore /warnaserror
+
+      - name: Tests
+        run: dotnet test --configuration Release --no-build --logger "trx;LogFileName=tests.trx" --results-directory TestResults
+
+      - name: Publicar resultados de test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/
+
+      - name: Publicar ejecutable
+        run: >
+          dotnet publish src/SDProjectEdit.App/SDProjectEdit.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          --output dist
+
+      - name: Humo — la CLI arranca y devuelve exit 0
+        shell: pwsh
+        run: |
+          $out = & .\dist\SDProjectEdit.exe --help
+          if ($LASTEXITCODE -ne 0) { throw "--help devolvió $LASTEXITCODE" }
+          if ($out -notmatch 'Editor de proyectos multi-DLL') { throw "la ayuda no salió como se esperaba" }
+          & .\dist\SDProjectEdit.exe comando-inexistente X:\nada
+          if ($LASTEXITCODE -ne 3) { throw "un comando desconocido debería devolver 3, devolvió $LASTEXITCODE" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SDProjectEdit-win-x64
+          path: dist/SDProjectEdit.exe
+          if-no-files-found: error

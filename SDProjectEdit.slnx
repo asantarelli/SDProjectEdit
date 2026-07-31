@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SDProjectEdit.App/SDProjectEdit.App.csproj" />
+    <Project Path="src/SDProjectEdit.Core/SDProjectEdit.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SDProjectEdit.Core.Tests/SDProjectEdit.Core.Tests.csproj" />
+  </Folder>
+</Solution>

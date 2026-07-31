@@ -1,0 +1,32 @@
+name: Proponer algo
+description: Una propiedad que falta en el catálogo, una opción nueva, una mejora
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: tipo
+    attributes:
+      label: Tipo
+      options:
+        - Agregar una propiedad de Clarion al catálogo
+        - Marcar una propiedad como "nunca centralizar"
+        - Opción nueva de CLI
+        - Mejora en la ventana
+        - Otra cosa
+    validations:
+      required: true
+
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Qué proponés
+      description: Y sobre todo, qué problema concreto te resuelve.
+    validations:
+      required: true
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto
+      description: |
+        Si es una propiedad de Clarion: cómo se llama exactamente, qué valores acepta, qué hace,
+        y si es razonable compartirla entre todos los proyectos de un multi-DLL o es por-proyecto.
