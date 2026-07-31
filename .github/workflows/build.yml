@@ -13,10 +13,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Instalar .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -31,7 +31,7 @@ jobs:
 
       - name: Publicar resultados de test
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: TestResults/
@@ -47,16 +47,78 @@ jobs:
           -p:EnableCompressionInSingleFile=true
           --output dist
 
-      - name: Humo — la CLI arranca y devuelve exit 0
+      # Los tests unitarios corren sobre Core. Esto ejercita el .exe que realmente se distribuye,
+      # de punta a punta, sobre un solution sintético.
+      - name: Humo — migración completa con el ejecutable publicado
         shell: pwsh
         run: |
-          $out = & .\dist\SDProjectEdit.exe --help
-          if ($LASTEXITCODE -ne 0) { throw "--help devolvió $LASTEXITCODE" }
-          if ($out -notmatch 'Editor de proyectos multi-DLL') { throw "la ayuda no salió como se esperaba" }
-          & .\dist\SDProjectEdit.exe comando-inexistente X:\nada
-          if ($LASTEXITCODE -ne 3) { throw "un comando desconocido debería devolver 3, devolvió $LASTEXITCODE" }
+          $ErrorActionPreference = 'Stop'
+          $exe = Resolve-Path .\dist\SDProjectEdit.exe
 
-      - uses: actions/upload-artifact@v4
+          function Assert-Exit([int]$actual, [int]$expected, [string]$que) {
+            if ($actual -ne $expected) { throw "$que : esperaba exit $expected, devolvió $actual" }
+          }
+
+          # --- fixture: dos .cwproj con el formato físico de Clarion (UTF-8 BOM, CRLF, sin salto final)
+          $sln = Join-Path $env:RUNNER_TEMP 'humo'
+          New-Item -ItemType Directory -Force $sln | Out-Null
+          $utf8Bom = [System.Text.UTF8Encoding]::new($true)
+          foreach ($name in 'Uno', 'Dos') {
+            $lines = @(
+              '<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">'
+              '  <PropertyGroup>'
+              "    <AssemblyName>$name</AssemblyName>"
+              '    <Configuration Condition=" ''$(Configuration)'' == '''' ">Debug</Configuration>'
+              '    <DefineConstants>_ABCDllMode_=&gt;1%3b_ABCLinkMode_=&gt;0</DefineConstants>'
+              '    <Model>Dll</Model>'
+              '  </PropertyGroup>'
+              '  <PropertyGroup Condition=" ''$(Configuration)'' == ''Release'' ">'
+              '    <DebugSymbols>False</DebugSymbols>'
+              '    <vid>off</vid>'
+              '  </PropertyGroup>'
+              '</Project>'
+            )
+            [System.IO.File]::WriteAllText("$sln\$name.cwproj", ($lines -join "`r`n"), $utf8Bom)
+          }
+          $antes = Get-Content "$sln\Uno.cwproj" -Raw
+
+          # --- ayuda y códigos de salida
+          $ayuda = (& $exe --help) -join "`n"
+          Assert-Exit $LASTEXITCODE 0 '--help'
+          if ($ayuda -notmatch 'Editor de proyectos multi-DLL') { throw 'la ayuda no salió como se esperaba' }
+
+          & $exe comando-inexistente $sln *> $null
+          Assert-Exit $LASTEXITCODE 3 'comando desconocido'
+
+          & $exe verificar $sln *> $null
+          Assert-Exit $LASTEXITCODE 2 'verificar sin Common.props'
+
+          # --- ciclo completo
+          & $exe analizar $sln *> $null;      Assert-Exit $LASTEXITCODE 0 'analizar'
+          & $exe plan $sln *> $null;          Assert-Exit $LASTEXITCODE 0 'plan'
+          if (Test-Path "$sln\Common.props") { throw 'plan no debería escribir nada' }
+          if ((Get-Content "$sln\Uno.cwproj" -Raw) -ne $antes) { throw 'plan modificó un .cwproj' }
+
+          & $exe aplicar $sln --yes *> $null; Assert-Exit $LASTEXITCODE 0 'aplicar'
+          if (-not (Test-Path "$sln\Common.props")) { throw 'no se creó Common.props' }
+
+          & $exe verificar $sln *> $null;     Assert-Exit $LASTEXITCODE 0 'verificar'
+          & $exe aplicar $sln --yes *> $null; Assert-Exit $LASTEXITCODE 0 'aplicar de nuevo (idempotencia)'
+
+          # --- garantías sobre el resultado
+          foreach ($name in 'Uno', 'Dos') {
+            $texto = Get-Content "$sln\$name.cwproj" -Raw
+            $imports = ([regex]::Matches($texto, 'Common\.props')).Count
+            if ($imports -ne 1) { throw "$name.cwproj tiene $imports imports de Common.props, debería tener 1" }
+            if ($texto -notmatch '_ABCDllMode_=&gt;1') { throw "$name.cwproj: se reescribió el escapado de DefineConstants" }
+            $null = [xml]$texto
+          }
+          $null = [xml](Get-Content "$sln\Common.props" -Raw)
+
+          Write-Host 'Humo OK: migración completa verificada sobre el ejecutable publicado.'
+          exit 0
+
+      - uses: actions/upload-artifact@v7
         with:
           name: SDProjectEdit-win-x64
           path: dist/SDProjectEdit.exe
